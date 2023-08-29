@@ -428,9 +428,9 @@ class Normalize:
         ValueError: When mean/std is not list or any value in std is 0.
     """
 
-    def __init__(self, mean=(0.5, ), std=(0.5, )):
+    def __init__(self, mean=(0.5,), std=(0.5,)):
         if not (isinstance(mean, (list, tuple)) and isinstance(std, (list, tuple))) \
-            and (len(mean) not in [1, 3]) and (len(std) not in [1, 3]):
+                and (len(mean) not in [1, 3]) and (len(std) not in [1, 3]):
             raise ValueError(
                 "{}: input type is invalid. It should be list or tuple with the lenght of 1 or 3".
                 format(self))
@@ -503,7 +503,7 @@ class Padding:
                 0,
                 pad_width,
                 cv2.BORDER_CONSTANT,
-                value=(self.im_padding_value, ) * img_channels)
+                value=(self.im_padding_value,) * img_channels)
             for key in data.get('gt_fields', []):
                 data[key] = cv2.copyMakeBorder(
                     data[key],
@@ -628,7 +628,7 @@ class RandomPaddingCrop:
                 0,
                 pad_width,
                 cv2.BORDER_CONSTANT,
-                value=(self.im_padding_value, ) * img_channels)
+                value=(self.im_padding_value,) * img_channels)
             for key in data.get('gt_fields', []):
                 data[key] = cv2.copyMakeBorder(
                     data[key],
@@ -643,7 +643,7 @@ class RandomPaddingCrop:
     def __call__(self, data):
         img_shape = data['img'].shape[:2]
         if img_shape[0] == self.crop_size[0] and img_shape[1] == self.crop_size[
-                1]:
+            1]:
             return data
 
         data = self._padding(data)
@@ -688,7 +688,7 @@ class RandomCenterCrop:
                     'When type of `retain_ratio` is list or tuple, it shoule include 2 elements, but it is {}'
                     .format(retain_ratio))
             if retain_ratio[0] > 1 or retain_ratio[1] > 1 or retain_ratio[
-                    0] < 0 or retain_ratio[1] < 0:
+                0] < 0 or retain_ratio[1] < 0:
                 raise ValueError(
                     'Value of `retain_ratio` should be in [0, 1], but it is {}'.
                     format(retain_ratio))
@@ -925,7 +925,7 @@ class RandomRotation:
                 dsize=dsize,
                 flags=cv2.INTER_LINEAR,
                 borderMode=cv2.BORDER_CONSTANT,
-                borderValue=(self.im_padding_value, ) * img_channels)
+                borderValue=(self.im_padding_value,) * img_channels)
             for key in data.get('gt_fields', []):
                 data[key] = cv2.warpAffine(
                     data[key],
@@ -1123,7 +1123,6 @@ class RandomAffine:
         self.label_padding_value = label_padding_value
 
     def __call__(self, data):
-
         w, h = self.size
         bbox = [0, 0, data['img'].shape[1] - 1, data['img'].shape[0] - 1]
         x_offset = (random.random() - 0.5) * 2 * self.translation_offset
@@ -1156,7 +1155,7 @@ class RandomAffine:
             tuple(self.size),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_CONSTANT,
-            borderValue=(self.im_padding_value, ) * img_channels)
+            borderValue=(self.im_padding_value,) * img_channels)
         for key in data.get('gt_fields', []):
             data[key] = cv2.warpAffine(
                 np.uint8(data[key]),
@@ -1222,5 +1221,105 @@ class GenerateInstanceTargets:
                     axis=0)
 
             data['instances'] = instances
+
+        return data
+
+
+@manager.TRANSFORMS.add_component
+class Poly2Mask:
+    """
+    Convert gt_poly to mask.
+    Args:
+        use_multilabel (bool): Whether to use multi-label mode.
+        ignore_index (int, optional): Specifies a target value that is ignored. Default: 255.
+    """
+    def __init__(self, use_multilabel=False, ignore_index=255):
+        self.use_multilabel = use_multilabel
+        self.ignore_index = ignore_index
+
+        import pycocotools.mask as maskUtils
+        self.maskutils = maskUtils
+
+    def _poly2mask(self, mask_ann, img_h, img_w):
+        if isinstance(mask_ann, list):
+            # polygon -- a single object might consist of multiple parts
+            # we merge all parts into one mask rle code
+            rles = self.maskutils.frPyObjects(mask_ann, img_h, img_w)
+            rle = self.maskutils.merge(rles)
+        elif isinstance(mask_ann['counts'], list):
+            # uncompressed RLE
+            rle = self.maskutils.frPyObjects(mask_ann, img_h, img_w)
+        else:
+            # rle
+            rle = mask_ann
+        mask = self.maskutils.decode(rle)
+        return mask
+
+    def __call__(self, data):
+        img_h, img_w = data['img'].shape[:2]
+
+        assert 'instances' in data, ValueError
+
+        data['gt_fields'] = []
+        if not self.use_multilabel:
+            label = np.ones([img_h, img_w]).astype(np.uint8) * self.ignore_index
+            for instance in data['instances']:
+                cls_id = instance['gt_class']
+                binary_mask = self._poly2mask(instance['gt_poly'], img_h, img_w)
+                binary_mask = np.asarray(binary_mask).astype(np.uint8)
+                mask = binary_mask * cls_id
+                label = np.where(mask, mask, label)
+            data['label'] = label
+            data['gt_fields'].append('label')
+        else:
+            label = [np.zeros([img_h, img_w]).astype(np.uint8)
+                     for _ in range(data['num_classes'])]
+            for instance in data['instances']:
+                cls_id = instance['gt_class']
+                binary_mask = self._poly2mask(instance['gt_poly'], img_h, img_w)
+                binary_mask = np.asarray(binary_mask).astype(np.uint8)
+                label[cls_id] = binary_mask
+
+            for idx, one_class_label in enumerate(label):
+                data[f'label_{idx}'] = one_class_label
+                data['gt_fields'].append(f'label_{idx}')
+
+        del data['instances']
+
+        return data
+
+
+@manager.TRANSFORMS.add_component
+class MultiLabelMaskConcat:
+    """
+    At multi-label mode, concat the labels of various classes into a whole.
+
+    Args:
+        ignore_index (int, optional): Specifies a target value that is ignored. Default: 255.
+    """
+
+    def __init__(self, ignore_index=255):
+        self.ignore_index = ignore_index
+
+    def __call__(self, data):
+        error_log = (
+            "In multi-label segmentation tasks, `COCOInstance`, `Poly2Mask` and "
+            "`MultiLabelMaskConcat` are used together. Generally, `Poly2Mask` is placed "
+            "at the top of the transforms list and `MultiLabelMaskConcat` is placed at the bottom, "
+            "and the arg `use_multilabel` of `Poly2Mask` must be set to True. ")
+        assert 'label' not in data, Exception(error_log)
+        assert 'num_classes' not in Exception(error_log)
+        label = []
+        for idx in range(data['num_classes']):
+            assert f'label_{idx}' in data, Exception(error_log)
+            label.append(data[f'label_{idx}'].copy()[None])
+            del data[f'label_{idx}']
+            data['gt_fields'].remove(f'label_{idx}')
+
+        label = np.concatenate(label, axis=0)
+
+        label[label == self.ignore_index] = 0
+
+        data['label'] = label
 
         return data
