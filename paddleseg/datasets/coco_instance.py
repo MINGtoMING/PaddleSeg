@@ -33,6 +33,10 @@ class COCOInstance(paddle.io.Dataset):
         anno_path (str): coco annotation file path.
         transforms (list): Transforms for image.
     """
+    NUM_CLASSES = 80
+    IGNORE_INDEX = 255
+    IMG_CHANNELS = 3
+
     def __init__(self, dataset_dir, image_dir, anno_path, transforms):
         super().__init__()
         self.load_image_only = False
@@ -51,7 +55,7 @@ class COCOInstance(paddle.io.Dataset):
 
         coco = COCO(anno_path)
         cat_ids = coco.getCatIds()
-        self.num_classes = len(cat_ids)
+        self.NUM_CLASSES = len(cat_ids)
         catid2clsid = dict({catid: i for i, catid in enumerate(cat_ids)})
 
         if 'annotations' not in coco.dataset:
@@ -96,7 +100,7 @@ class COCOInstance(paddle.io.Dataset):
     def __getitem__(self, idx):
         data = {
             'trans_info': [],
-            'num_classes': self.num_classes,
+            'num_classes': self.NUM_CLASSES,
         }
         if not self.load_image_only:
             image_path, instances = self.file_list[idx]
