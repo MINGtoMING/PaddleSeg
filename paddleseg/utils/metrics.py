@@ -59,11 +59,11 @@ def calculate_area(pred, label, num_classes, ignore_index=255):
         label_area = paddle.stack(label_area)
         intersect_area = paddle.stack(intersect_area)
     else:
-        pred_area = pred.sum(0).sum(-1).sum(-1).astype("int64")
-        label_area = label.sum(0).sum(-1).sum(-1).astype("int64")
+        pred_area = np.sum(pred, axis=[0, 2, 3]).astype("int64")
+        label_area = np.sum(label, axis=[0, 2, 3]).astype("int64")
         intersect = paddle.logical_and(
             pred.astype("bool"), label.astype("bool")).astype("int64")
-        intersect_area = intersect.sum(0).sum(-1).sum(-1)
+        intersect_area = np.sum(intersect, axis=[0, 2, 3]).astype("int64")
 
     return intersect_area, pred_area, label_area
 
