@@ -224,7 +224,39 @@ class DistillCrossEntropyLoss(CrossEntropyLoss):
 @manager.LOSSES.add_component
 class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
     """
-    Implements the cross entropy loss function.
+    This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
+
+    It is useful when training a multi-label classification problems.
+    This is particularly useful when you have an unbalanced training set.
+    The `input` is expected to contain raw, un-normalized scores for each class.
+
+    `input` has to be a Tensor of size either :math:`(batch_size, C)` or
+    :math:`(batch_size, C, d_1, d_2, ..., d_K)`
+    with :math:`K \geq 1` for the `K`-dimensional case (described later).
+
+    This criterion expects a class index in the range :math:`[0, C-1]` as the
+    `target` for each value of a 1D tensor of size `minibatch`; if `ignore_index`
+    is specified, this criterion also accepts this class index (this index may not
+    necessarily be in the class range).
+
+    The loss can be described as:
+
+    .. math::
+        \text{loss}(x, class) = -\log\left(\frac{\exp(x[class])}{\sum_j \exp(x[j])}\right)
+                       = -x[class] + \log\left(\sum_j \exp(x[j])\right)
+
+    or in the case of the :attr:`weight` argument being specified:
+
+    .. math::
+        \text{loss}(x, class) = weight[class] \left(-x[class] + \log\left(\sum_j \exp(x[j])\right)\right)
+
+    The losses are averaged across observations for each minibatch.
+
+    Can also be used for higher dimension inputs, such as 2D images, by providing
+    an input of size :math:`(minibatch, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`,
+    where :math:`K` is the number of dimensions, and a target of appropriate shape
+    (see below).
+
 
     Args:
         weight (tuple|list|ndarray|Tensor, optional): A manual rescaling weight
@@ -281,16 +313,26 @@ class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
 
         if channel_axis == 1:
             logit = paddle.transpose(logit, [0, 2, 3, 1])
-        label = label.astype('int64')
+
         assert label.shape == logit.shape
 
-        logit = paddle.where(label.astype('bool'), -logit, logit)
-        logit_pos = paddle.where(label.astype('bool'), logit, paddle.to_tensor(float("-inf")))
-        logit_neg = paddle.where(label.astype('bool'), paddle.to_tensor(float("-inf")), logit)
-        zeros = paddle.zeros_like(logit_neg[..., :1])
-        logit_pos = paddle.concat([logit_pos, zeros], axis=-1)
-        logit_neg = paddle.concat([logit_neg, zeros], axis=-1)
+        mask = (label != self.ignore_index)
+        mask = paddle.all(mask, axis=-1, keepdim=True) * mask
+        label = paddle.where(mask, label, paddle.zeros_like(label))
+        label = paddle.cast(label, 'bool')
+        mask.stop_gradient = True
+        label.stop_gradient = True
+
+        logit = paddle.where(label, -logit, logit)
+        logit_pos = paddle.where(paddle.logical_and(label, mask),
+                                 logit, paddle.to_tensor(float("-inf")))
+        logit_neg = paddle.where(paddle.logical_or(label, ~mask),
+                                 paddle.to_tensor(float("-inf")), logit)
+        logit_zero = paddle.zeros_like(logit_neg[..., :1])
+        logit_pos = paddle.concat([logit_zero, logit_pos], axis=-1)
+        logit_neg = paddle.concat([logit_zero, logit_neg], axis=-1)
         neg_loss = paddle.logsumexp(logit_neg, axis=-1)
         pos_loss = paddle.logsumexp(logit_pos, axis=-1)
         loss = neg_loss + pos_loss
-        return loss.mean()
+        avg_loss = loss.sum() / (mask[..., 0].astype("float32").sum() + self.EPS)
+        return avg_loss
