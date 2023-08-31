@@ -24,7 +24,7 @@ train_dataset:
 
 val_dataset:
   type: COCOInstance
-  dataset_dir: data/COCO2017/
+  dataset_root: data/COCO2017/
   image_dir: val2017/
   anno_path: annotations/instances_val2017.json
   mode: 'val'
