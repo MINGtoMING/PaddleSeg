@@ -21,6 +21,19 @@ from paddleseg.cvlibs import manager
 
 @manager.LOSSES.add_component
 class MultiLabelAsymmetricLoss(nn.Layer):
+    """
+    Multi-label asymmetric loss.
+
+    Args:
+        gamma_pos (float): positive focusing parameter.
+            Defaults to 0.0.
+        gamma_neg (float): Negative focusing parameter. We
+            usually set gamma_neg > gamma_pos. Defaults to 4.0.
+        clip (float, optional): Probability margin. Defaults to 0.05.
+        disable_focal_loss_grad (bool): freeze grad of asymmetric_weight.
+        ignore_index (int64, optional): Specifies a target value that is ignored
+            and does not contribute to the input gradient. Default ``255``.
+    """
 
     def __init__(self,
                  gamma_pos=1,
@@ -41,13 +54,13 @@ class MultiLabelAsymmetricLoss(nn.Layer):
         Forward computation.
 
         Args:
-            logit (Tensor): Logit tensor, the data type is float32, float64. Shape is
-                (N, C), where C is number of classes, and if shape is more than 2D, this
-                is (N, C, D1, D2,..., Dk), k >= 1.
-            label (Tensor): Label tensor, the data type is int64. Shape is (N, C), where each
-                value is 0 or 1, and if shape is more than 2D, this is
-                (N, C, D1, D2,..., Dk), k >= 1.
+            logit (Tensor): Logit tensor, the data type is float32, float64. Shape is (N, C, H, W).
+            label (Tensor): Label tensor, the data type is int64. Shape is (N, C, H, W),
+            where each value is {0, 1, ig_index}
+        Returns:
+            (Tensor): The average loss.
         """
+
         assert len(label.shape) == len(logit.shape)
         logit = logit.transpose([0, 2, 3, 1])
         mask = (label != self.ignore_index)
