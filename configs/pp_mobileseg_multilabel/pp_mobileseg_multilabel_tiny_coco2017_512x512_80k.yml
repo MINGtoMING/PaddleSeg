@@ -5,7 +5,6 @@ iters: 80000
 
 model:
   type: PPMobileSeg
-  num_classes: 80
   backbone:
     type: MobileSeg_Tiny
     inj_type: AAM

@@ -4,8 +4,10 @@ batch_size: 16  # total batch size is 32
 iters: 80000
 
 train_dataset:
+  image_dir: val2017/
+  anno_path: annotations/instances_val2017.json
   allow_overlap: True
-  add_background: False
+  add_background: True
   transforms:
     - type: ResizeStepScaling
       min_scale_factor: 0.5
@@ -56,13 +58,14 @@ lr_scheduler:
 
 loss:
   types:
-    - type: MixedLoss
-      losses:
-        - type: MultiLabelCategoricalCrossEntropyLoss
-        - type: MultiLabelAsymmetricLoss
-          gamma_pos: 0
-          gamma_neg: 4
-      coef: [0.5, 0.5]
+#    - type: MixedLoss
+#      losses:
+#        - type: MultiLabelCategoricalCrossEntropyLoss
+#        - type: MultiLabelAsymmetricLoss
+#          gamma_pos: 0
+#          gamma_neg: 4
+#      coef: [0.5, 0.5]
+  - type: MultiLabelCategoricalCrossEntropyLoss
   coef: [1]
 
 model:

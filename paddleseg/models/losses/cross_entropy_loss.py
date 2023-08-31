@@ -282,31 +282,22 @@ class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
             (Tensor): The average loss.
         """
 
-        channel_axis = 1 if self.data_format == 'NCHW' else -1
-        if channel_axis == 1:
-            logit = paddle.transpose(logit, [0, 2, 3, 1])
+        assert len(label.shape) == len(logit.shape)
+        logit = logit.transpose([0, 2, 3, 1])
 
-        assert label.shape == logit.shape
+        logexp_one = paddle.zeros_like(logit[..., :1])
 
-        mask = (label != self.ignore_index)
-        mask = paddle.all(mask, axis=-1, keepdim=True) * mask
-        label = paddle.where(mask, label, paddle.zeros_like(label))
-        label = paddle.cast(label, 'bool')
+        logit_pos = paddle.where((label == 1), logit, paddle.to_tensor(float('inf')))
+        logit_pos = paddle.concat([logexp_one, logit_pos], axis=-1)
+        loss_pos = paddle.logsumexp(-logit_pos, axis=-1)
 
-        logit = paddle.where(label, -logit, logit)
-        logit_pos = paddle.where(paddle.logical_and(label, mask),
-                                 logit, paddle.to_tensor(float("-inf")))
-        logit_neg = paddle.where(paddle.logical_or(label, ~mask),
-                                 paddle.to_tensor(float("-inf")), logit)
-        logit_zero = paddle.zeros_like(logit_neg[..., :1])
-        logit_pos = paddle.concat([logit_zero, logit_pos], axis=-1)
-        logit_neg = paddle.concat([logit_zero, logit_neg], axis=-1)
-        neg_loss = paddle.logsumexp(logit_neg, axis=-1)
-        pos_loss = paddle.logsumexp(logit_pos, axis=-1)
-        loss = neg_loss + pos_loss
-        mask = mask.all(-1).astype("float32")
-        loss = loss * mask
-        avg_loss = loss.sum() / (mask.sum() + self.EPS)
-        mask.stop_gradient = True
+        logit_neg = paddle.where((label == 0), logit, paddle.to_tensor(float('-inf')))
+        logit_neg = paddle.concat([logexp_one, logit_neg], axis=-1)
+        loss_neg = paddle.logsumexp(logit_neg, axis=-1)
+
+        loss = loss_pos + loss_neg
+        mask = (label != self.ignore_index).astype('float32')
+        loss = paddle.mean(loss) / (paddle.mean(mask) + self.EPS)
         label.stop_gradient = True
-        return avg_loss
+        mask.stop_gradient = True
+        return loss

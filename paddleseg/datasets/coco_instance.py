@@ -155,8 +155,9 @@ class COCOInstance(paddle.io.Dataset):
             self.NUM_CLASSES = len(cat_ids)
             self.num_classes = len(cat_ids)
         if self.add_background:
-            self.NUM_CLASSES = len(cat_ids) + 1
-            self.num_classes = len(cat_ids) + 1
+            if not self.allow_overlap:
+                self.NUM_CLASSES = len(cat_ids) + 1
+                self.num_classes = len(cat_ids) + 1
         catid2clsid = dict({catid: i for i, catid in enumerate(cat_ids)})
 
         if 'annotations' not in coco.dataset:
@@ -230,15 +231,14 @@ class COCOInstance(paddle.io.Dataset):
                 label[label == self.ignore_index] = self.num_classes - 1
         # multi-label
         else:
-            label = np.zeros([img_h, img_w, self.num_classes], dtype=np.uint8)
+            label = np.ones([img_h, img_w, self.num_classes], dtype=np.uint8) * self.ignore_index
             for cls_idx, poly in enumerate(gt_polygon):
                 if poly is not None:
-                    label[..., cls_idx] = self._poly2mask(poly, img_h, img_w)
-
-            if self.add_background:
-                label[..., -1] = (label.sum(axis=-1) == 0).astype(np.uint8)
-            else:
-                label[label.sum(-1) == 0] = self.ignore_index
+                    if not self.add_background:
+                        label[..., cls_idx] = np.where(
+                            self._poly2mask(poly, img_h, img_w), 1, self.ignore_index)
+                    else:
+                        label[..., cls_idx] = self._poly2mask(poly, img_h, img_w)
 
         return label
 
