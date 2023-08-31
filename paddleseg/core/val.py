@@ -158,6 +158,9 @@ def evaluate(model,
                         stride=stride,
                         crop_size=crop_size)
 
+            if len(label.shape) == 4:
+                pred = (logits > 0).astype(paddle.int32)
+
             intersect_area, pred_area, label_area = metrics.calculate_area(
                 pred,
                 label,
