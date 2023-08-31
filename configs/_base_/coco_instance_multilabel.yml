@@ -1,0 +1,7 @@
+_base_: './coco_instance_singlelabel.yml'
+
+train_dataset:
+  allow_overlap: True
+
+val_dataset:
+  allow_overlap: True
