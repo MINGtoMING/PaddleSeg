@@ -4,8 +4,6 @@ batch_size: 16  # total batch size is 32
 iters: 80000
 
 train_dataset:
-  image_dir: val2017/
-  anno_path: annotations/instances_val2017.json
   allow_overlap: True
   add_background: False
   transforms:
