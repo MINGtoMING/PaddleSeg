@@ -7,7 +7,7 @@ train_dataset:
   image_dir: val2017/
   anno_path: annotations/instances_val2017.json
   allow_overlap: True
-  add_background: True
+  add_background: False
   transforms:
     - type: ResizeStepScaling
       min_scale_factor: 0.5
@@ -26,7 +26,7 @@ train_dataset:
 
 val_dataset:
   allow_overlap: True
-  add_background: True
+  add_background: False
   transforms:
     - type: Resize
       target_size: [2048, 512]
@@ -58,12 +58,18 @@ lr_scheduler:
 
 loss:
   types:
-    - type: MultiLabelCategoricalCrossEntropyLoss
+    - type: MixedLoss
+      losses:
+        - type: MultiLabelCategoricalCrossEntropyLoss
+        - type: MultiLabelAsymmetricLoss
+          gamma_pos: 0
+          gamma_neg: 4
+      coef: [0.5, 0.5]
   coef: [1]
 
 model:
   type: PPMobileSeg
-  num_classes: 81
+  num_classes: 80
   backbone:
     type: MobileSeg_Base
     inj_type: AAMSx8
