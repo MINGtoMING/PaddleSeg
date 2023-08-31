@@ -132,10 +132,10 @@ class CrossEntropyLoss(nn.Layer):
         if self.top_k_percent_pixels == 1.0:
             avg_loss = paddle.mean(loss) / (paddle.mean(mask * coef) + self.EPS)
         else:
-            loss = loss.reshape((-1, ))
+            loss = loss.reshape((-1,))
             top_k_pixels = int(self.top_k_percent_pixels * loss.numel())
             loss, indices = paddle.topk(loss, top_k_pixels)
-            coef = coef.reshape((-1, ))
+            coef = coef.reshape((-1,))
             coef = paddle.gather(coef, indices)
             coef.stop_gradient = True
             coef = coef.astype('float32')
@@ -320,8 +320,6 @@ class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
         mask = paddle.all(mask, axis=-1, keepdim=True) * mask
         label = paddle.where(mask, label, paddle.zeros_like(label))
         label = paddle.cast(label, 'bool')
-        mask.stop_gradient = True
-        label.stop_gradient = True
 
         logit = paddle.where(label, -logit, logit)
         logit_pos = paddle.where(paddle.logical_and(label, mask),
@@ -334,5 +332,9 @@ class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
         neg_loss = paddle.logsumexp(logit_neg, axis=-1)
         pos_loss = paddle.logsumexp(logit_pos, axis=-1)
         loss = neg_loss + pos_loss
-        avg_loss = loss.sum() / (mask[..., 0].astype("float32").sum() + self.EPS)
+        mask = mask.all(-1).astype("float32")
+        loss = loss * mask
+        avg_loss = loss.sum() / (mask.sum() + self.EPS)
+        mask.stop_gradient = True
+        label.stop_gradient = True
         return avg_loss
