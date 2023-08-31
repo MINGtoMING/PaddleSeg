@@ -15,19 +15,15 @@
 import os
 
 import numpy as np
-from PIL import Image
-
-from paddleseg.datasets import Dataset
-from paddleseg.utils.download import download_file_and_uncompress
-from paddleseg.utils import seg_env, logger
 from paddleseg.cvlibs import manager
+from paddleseg.datasets import Dataset
 from paddleseg.transforms import Compose
-import paddleseg.transforms.functional as F
-
+from paddleseg.utils import seg_env, logger
+from paddleseg.utils.download import download_file_and_uncompress
 from pycocotools.coco import COCO
+from pycocotools.mask import decode as rle_decode
 from pycocotools.mask import frPyObjects as rle_frPyObjects
 from pycocotools.mask import merge as rle_merge
-from pycocotools.mask import decode as rle_decode
 from scipy.ndimage import distance_transform_edt
 
 URL = "COCO2017 zip url to be provided."
@@ -127,22 +123,25 @@ class COCOInstance(Dataset):
                 data['img'] = image_path
                 data = self.transforms(data)
                 data['label'] = self._gen_label(gt_polygon, img_h, img_w)
-                return data
             else:
                 image_path = self.file_list[idx]
                 data['img'] = image_path
                 data = self.transforms(data)
-                return data
         else:
             image_path, gt_polygon, [img_h, img_w] = self.file_list[idx]
             data['img'] = image_path
             data['label'] = self._gen_label(gt_polygon, img_h, img_w)
             data['gt_fields'].append('label')
             data = self.transforms(data)
+
             if self.edge:
                 edge_mask = self._mask2edge(data['label'], radius=2)
                 data['edge'] = edge_mask
-            return data
+
+        if not self.allow_overlap:
+            data['label'] = data['label'][None, ...]
+
+        return data
 
     def _parse_anno(self):
         coco = COCO(self.anno_path)
@@ -221,30 +220,27 @@ class COCOInstance(Dataset):
 
             if self.add_background:
                 label[label == self.ignore_index] = self.num_classes + 1
-
-            label = label[np.newaxis, ...]
-
         # multi-label
         else:
-            label = np.zeros([self.num_classes, img_h, img_w], dtype=np.uint8)
+            label = np.zeros([img_h, img_w, self.num_classes], dtype=np.uint8)
             for cls_idx, poly in enumerate(gt_polygon):
                 if poly is not None:
-                    label[cls_idx] = self._poly2mask(poly, img_h, img_w)
+                    label[..., cls_idx] = self._poly2mask(poly, img_h, img_w)
 
             if self.add_background:
-                bg_label = (label.sum(0) == 0).astype(np.uint8)
-                label = np.concatenate([label, bg_label], axis=0)
+                bg_label = (label.sum(axis=-1, keepdims=True) == 0).astype(np.uint8)
+                label = np.concatenate([label, bg_label], axis=-1)
             else:
-                label[:, label.sum(0) == 0] = self.ignore_index
+                label[label.sum(-1) == 0] = self.ignore_index
 
         return label
 
     def _mask2edge(self, mask, radius=2):
         if not self.allow_overlap:
             if not self.add_background:
-                mask = [mask[0] == i for i in range(self.num_classes)]
+                mask = [mask == i for i in range(self.num_classes)]
             else:
-                mask = [mask[0] == i for i in range(self.num_classes + 1)]
+                mask = [mask == i for i in range(self.num_classes + 1)]
             mask = np.array(mask).astype(np.uint8)
 
         if radius < 1:
@@ -265,16 +261,3 @@ class COCOInstance(Dataset):
         edge = (edge > 0).astype(np.uint8)
 
         return edge
-
-
-if __name__ == '__main__':
-    coco = COCOInstance(
-        transforms=[],
-        dataset_root="../../data/COCO2017",
-        image_dir="val2017",
-        anno_path="annotations/instances_val2017.json",
-        allow_overlap=False,
-        edge=True,
-        add_background=True
-    )
-
