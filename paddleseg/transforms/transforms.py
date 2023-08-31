@@ -630,14 +630,20 @@ class RandomPaddingCrop:
                 cv2.BORDER_CONSTANT,
                 value=(self.im_padding_value, ) * img_channels)
             for key in data.get('gt_fields', []):
-                data[key] = cv2.copyMakeBorder(
-                    data[key],
-                    0,
-                    pad_height,
-                    0,
-                    pad_width,
-                    cv2.BORDER_CONSTANT,
-                    value=self.label_padding_value)
+                if len(data[key].shape) == 2:
+                    data[key] = cv2.copyMakeBorder(
+                        data[key],
+                        0,
+                        pad_height,
+                        0,
+                        pad_width,
+                        cv2.BORDER_CONSTANT,
+                        value=self.label_padding_value)
+                else:
+                    data[key] = np.pad(
+                        data[key],
+                        ((0, pad_height), (0, pad_width), (0, 0)),
+                        constant_values=self.label_padding_value)
         return data
 
     def __call__(self, data):
