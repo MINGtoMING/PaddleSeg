@@ -36,3 +36,4 @@ from .semantic_encode_cross_entropy_loss import SECrossEntropyLoss
 from .semantic_connectivity_loss import SemanticConnectivityLoss
 from .maskformer_loss import MaskFormerLoss
 from .cross_entropy_loss import MultiLabelCategoricalCrossEntropyLoss
+from .multilabel_asymmetric_loss import MultiLabelAsymmetricLoss
