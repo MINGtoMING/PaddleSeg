@@ -41,22 +41,29 @@ def calculate_area(pred, label, num_classes, ignore_index=255):
         raise ValueError('Shape of `pred` and `label should be equal, '
                          'but there are {} and {}.'.format(pred.shape,
                                                            label.shape))
-    pred_area = []
-    label_area = []
-    intersect_area = []
-    mask = label != ignore_index
+    if len(label.shape) == 3:
+        pred_area = []
+        label_area = []
+        intersect_area = []
+        mask = label != ignore_index
 
-    for i in range(num_classes):
-        pred_i = paddle.logical_and(pred == i, mask)
-        label_i = label == i
-        intersect_i = paddle.logical_and(pred_i, label_i)
-        pred_area.append(paddle.sum(paddle.cast(pred_i, "int64")))
-        label_area.append(paddle.sum(paddle.cast(label_i, "int64")))
-        intersect_area.append(paddle.sum(paddle.cast(intersect_i, "int64")))
+        for i in range(num_classes):
+            pred_i = paddle.logical_and(pred == i, mask)
+            label_i = label == i
+            intersect_i = paddle.logical_and(pred_i, label_i)
+            pred_area.append(paddle.sum(paddle.cast(pred_i, "int64")))
+            label_area.append(paddle.sum(paddle.cast(label_i, "int64")))
+            intersect_area.append(paddle.sum(paddle.cast(intersect_i, "int64")))
 
-    pred_area = paddle.stack(pred_area)
-    label_area = paddle.stack(label_area)
-    intersect_area = paddle.stack(intersect_area)
+        pred_area = paddle.stack(pred_area)
+        label_area = paddle.stack(label_area)
+        intersect_area = paddle.stack(intersect_area)
+    else:
+        pred_area = pred.sum(0).sum(-1).sum(-1).astype("int64")
+        label_area = label.sum(0).sum(-1).sum(-1).astype("int64")
+        intersect = paddle.logical_and(
+            pred.astype("bool"), label.astype("bool")).astype("int64")
+        intersect_area = intersect.sum(0).sum(-1).sum(-1)
 
     return intersect_area, pred_area, label_area
 
