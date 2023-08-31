@@ -5,4 +5,5 @@ tqdm
 filelock
 scipy
 prettytable
+pycocotools
 scikit-learn
