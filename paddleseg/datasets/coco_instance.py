@@ -15,8 +15,8 @@
 import os
 
 import numpy as np
+import paddle
 from paddleseg.cvlibs import manager
-from paddleseg.datasets import Dataset
 from paddleseg.transforms import Compose
 from paddleseg.utils import seg_env, logger
 from paddleseg.utils.download import download_file_and_uncompress
@@ -30,7 +30,7 @@ URL = "COCO2017 zip url to be provided."
 
 
 @manager.DATASETS.add_component
-class COCOInstance(Dataset):
+class COCOInstance(paddle.io.Dataset):
     """
     COCO dataset `https://cocodataset.org/`.
     `COCOInstance` api used for dataset adopts the annotation format of COCO instance segmentation style.
@@ -72,6 +72,7 @@ class COCOInstance(Dataset):
 
     def __init__(self, transforms, dataset_root=None, image_dir=None, anno_path=None,
                  mode='train', allow_overlap=False, add_background=False, edge=False):
+        super().__init__()
         self.dataset_root = dataset_root
         self.transforms = Compose(transforms)
         mode = mode.lower()
@@ -123,6 +124,10 @@ class COCOInstance(Dataset):
                 data['img'] = image_path
                 data = self.transforms(data)
                 data['label'] = self._gen_label(gt_polygon, img_h, img_w)
+                if not self.allow_overlap:
+                    data['label'] = data['label'][None]
+                else:
+                    data['label'] = data['label'].transpose([2, 0, 1])
             else:
                 image_path = self.file_list[idx]
                 data['img'] = image_path
@@ -133,22 +138,29 @@ class COCOInstance(Dataset):
             data['label'] = self._gen_label(gt_polygon, img_h, img_w)
             data['gt_fields'].append('label')
             data = self.transforms(data)
+            if not self.allow_overlap:
+                data['label'] = data['label'][None]
+            else:
+                data['label'] = data['label'].transpose([2, 0, 1])
 
             if self.edge:
                 edge_mask = self._mask2edge(data['label'], radius=2)
                 data['edge'] = edge_mask
 
-        if not self.allow_overlap:
-            data['label'] = data['label'][None, ...]
-
         return data
+
+    def __len__(self):
+        return len(self.file_list)
 
     def _parse_anno(self):
         coco = COCO(self.anno_path)
         cat_ids = coco.getCatIds()
         if self.NUM_CLASSES != len(cat_ids):
             self.NUM_CLASSES = len(cat_ids)
-            self.num_classes = self.NUM_CLASSES
+            self.num_classes = len(cat_ids)
+        if self.add_background:
+            self.NUM_CLASSES = len(cat_ids) + 1
+            self.num_classes = len(cat_ids) + 1
         catid2clsid = dict({catid: i for i, catid in enumerate(cat_ids)})
 
         if 'annotations' not in coco.dataset:
@@ -219,7 +231,7 @@ class COCOInstance(Dataset):
                     label = np.where(mask, cls_idx, label)
 
             if self.add_background:
-                label[label == self.ignore_index] = self.num_classes + 1
+                label[label == self.ignore_index] = self.num_classes
         # multi-label
         else:
             label = np.zeros([img_h, img_w, self.num_classes], dtype=np.uint8)
@@ -228,8 +240,7 @@ class COCOInstance(Dataset):
                     label[..., cls_idx] = self._poly2mask(poly, img_h, img_w)
 
             if self.add_background:
-                bg_label = (label.sum(axis=-1, keepdims=True) == 0).astype(np.uint8)
-                label = np.concatenate([label, bg_label], axis=-1)
+                label[..., -1] = (label.sum(axis=-1) == 0).astype(np.uint8)
             else:
                 label[label.sum(-1) == 0] = self.ignore_index
 
@@ -237,10 +248,7 @@ class COCOInstance(Dataset):
 
     def _mask2edge(self, mask, radius=2):
         if not self.allow_overlap:
-            if not self.add_background:
-                mask = [mask == i for i in range(self.num_classes)]
-            else:
-                mask = [mask == i for i in range(self.num_classes + 1)]
+            mask = [mask[0] == i for i in range(self.num_classes)]
             mask = np.array(mask).astype(np.uint8)
 
         if radius < 1:
