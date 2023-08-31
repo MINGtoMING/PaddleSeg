@@ -138,10 +138,6 @@ class COCOInstance(paddle.io.Dataset):
             data['label'] = self._gen_label(gt_polygon, img_h, img_w)
             data['gt_fields'].append('label')
             data = self.transforms(data)
-            if not self.allow_overlap:
-                data['label'] = data['label'][None]
-            else:
-                data['label'] = data['label'].transpose([2, 0, 1])
 
             if self.edge:
                 edge_mask = self._mask2edge(data['label'], radius=2)
@@ -231,7 +227,7 @@ class COCOInstance(paddle.io.Dataset):
                     label = np.where(mask, cls_idx, label)
 
             if self.add_background:
-                label[label == self.ignore_index] = self.num_classes
+                label[label == self.ignore_index] = self.num_classes - 1
         # multi-label
         else:
             label = np.zeros([img_h, img_w, self.num_classes], dtype=np.uint8)
