@@ -219,3 +219,78 @@ class DistillCrossEntropyLoss(CrossEntropyLoss):
 
         return self._post_process_loss(student_logit, label, semantic_weights,
                                        loss)
+
+
+@manager.LOSSES.add_component
+class MultiLabelCategoricalCrossEntropyLoss(nn.Layer):
+    """
+    Implements the cross entropy loss function.
+
+    Args:
+        weight (tuple|list|ndarray|Tensor, optional): A manual rescaling weight
+            given to each class. Its length must be equal to the number of classes.
+            Default ``None``.
+        ignore_index (int64, optional): Specifies a target value that is ignored
+            and does not contribute to the input gradient. Default ``255``.
+        top_k_percent_pixels (float, optional): the value lies in [0.0, 1.0].
+            When its value < 1.0, only compute the loss for the top k percent pixels
+            (e.g., the top 20% pixels). This is useful for hard pixel mining. Default ``1.0``.
+        avg_non_ignore (bool, optional): Whether the loss is only averaged over non-ignored value of pixels. Default: True.
+        data_format (str, optional): The tensor format to use, 'NCHW' or 'NHWC'. Default ``'NCHW'``.
+    """
+
+    def __init__(self,
+                 weight=None,
+                 ignore_index=255,
+                 top_k_percent_pixels=1.0,
+                 avg_non_ignore=True,
+                 data_format='NCHW'):
+        super(MultiLabelCategoricalCrossEntropyLoss, self).__init__()
+        self.ignore_index = ignore_index
+        self.top_k_percent_pixels = top_k_percent_pixels
+        self.avg_non_ignore = avg_non_ignore
+        self.EPS = 1e-8
+        self.data_format = data_format
+        if weight is not None:
+            self.weight = paddle.to_tensor(weight, dtype='float32')
+        else:
+            self.weight = None
+
+    def forward(self, logit, label, semantic_weights=None):
+        """
+        Forward computation.
+
+        Args:
+            logit (Tensor): Logit tensor, the data type is float32, float64. Shape is
+                (N, C), where C is number of classes, and if shape is more than 2D, this
+                is (N, C, D1, D2,..., Dk), k >= 1.
+            label (Tensor): Label tensor, the data type is int64. Shape is (N), where each
+                value is 0 <= label[i] <= C-1, and if shape is more than 2D, this is
+                (N, D1, D2,..., Dk), k >= 1.
+            semantic_weights (Tensor, optional): Weights about loss for each pixels,
+                shape is the same as label. Default: None.
+        Returns:
+            (Tensor): The average loss.
+        """
+        channel_axis = 1 if self.data_format == 'NCHW' else -1
+        if self.weight is not None and logit.shape[channel_axis] != len(
+                self.weight):
+            raise ValueError(
+                'The number of weights = {} must be the same as the number of classes = {}.'
+                .format(len(self.weight), logit.shape[channel_axis]))
+
+        if channel_axis == 1:
+            logit = paddle.transpose(logit, [0, 2, 3, 1])
+        label = label.astype('int64')
+        assert label.shape == logit.shape
+
+        logit = paddle.where(label.astype('bool'), -logit, logit)
+        logit_pos = paddle.where(label.astype('bool'), logit, paddle.to_tensor(float("-inf")))
+        logit_neg = paddle.where(label.astype('bool'), paddle.to_tensor(float("-inf")), logit)
+        zeros = paddle.zeros_like(logit_neg[..., :1])
+        logit_pos = paddle.concat([logit_pos, zeros], axis=-1)
+        logit_neg = paddle.concat([logit_neg, zeros], axis=-1)
+        neg_loss = paddle.logsumexp(logit_neg, axis=-1)
+        pos_loss = paddle.logsumexp(logit_pos, axis=-1)
+        loss = neg_loss + pos_loss
+        return loss.mean()
