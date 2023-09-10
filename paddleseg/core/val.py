@@ -38,7 +38,8 @@ def evaluate(model,
              amp_level='O1',
              num_workers=0,
              print_detail=True,
-             auc_roc=False):
+             auc_roc=False,
+             use_multilabel=False):
     """
     Launch evalution.
 
@@ -59,6 +60,7 @@ def evaluate(model,
         num_workers (int, optional): Num workers for data loader. Default: 0.
         print_detail (bool, optional): Whether to print detailed information about the evaluation process. Default: True.
         auc_roc(bool, optional): whether add auc_roc metric
+        use_multilabel(bool, optional): whether open multi-label mode
 
     Returns:
         float: The mIoU of validation datasets.
@@ -148,7 +150,8 @@ def evaluate(model,
                             trans_info=data['trans_info'],
                             is_slide=is_slide,
                             stride=stride,
-                            crop_size=crop_size)
+                            crop_size=crop_size,
+                            use_multilabel=use_multilabel)
                 else:
                     pred, logits = infer.inference(
                         model,
@@ -156,13 +159,15 @@ def evaluate(model,
                         trans_info=data['trans_info'],
                         is_slide=is_slide,
                         stride=stride,
-                        crop_size=crop_size)
+                        crop_size=crop_size,
+                        use_multilabel=use_multilabel)
 
             intersect_area, pred_area, label_area = metrics.calculate_area(
                 pred,
                 label,
                 eval_dataset.num_classes,
-                ignore_index=eval_dataset.ignore_index)
+                ignore_index=eval_dataset.ignore_index,
+                use_multilabel=use_multilabel)
 
             # Gather from all ranks
             if nranks > 1:

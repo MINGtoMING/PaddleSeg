@@ -125,6 +125,11 @@ def parse_args():
     parser.add_argument(
         '--opts', help='Update the key-value pairs of all options.', nargs='+')
 
+    parser.add_argument(
+        '--use_multilabel',
+        help='whether open multi-label mode.',
+        action='store_true')
+
     return parser.parse_args()
 
 
@@ -156,6 +161,10 @@ def main(args):
         loss_len = len(cfg.dic['loss']['types'])
         for i in range(loss_len):
             cfg.dic['loss']['types'][i]['data_format'] = args.data_format
+    if args.use_multilabel:
+        if 'test_config' not in cfg.dic:
+            cfg.dic.update({'test_config': {}})
+        cfg.dic['test_config']['use_multilabel'] = args.use_multilabel
 
     model = utils.convert_sync_batchnorm(builder.model, args.device)
 
