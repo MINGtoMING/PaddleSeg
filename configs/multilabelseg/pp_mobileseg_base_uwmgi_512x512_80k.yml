@@ -5,7 +5,7 @@ train_dataset:
   type: COCODataset
   image_root: data/UWMGI/images/
   json_file: data/UWMGI/annotations/train.json
-  add_background: False
+  add_background: True
   use_multilabel: True
   transforms:
     - type: ResizeStepScaling
@@ -24,7 +24,7 @@ val_dataset:
   type: COCODataset
   image_root: data/UWMGI/images/
   json_file: data/UWMGI/annotations/val.json
-  add_background: False
+  add_background: True
   use_multilabel: True
   transforms:
     - type: Resize
@@ -67,7 +67,7 @@ loss:
 
 model:
   type: PPMobileSeg
-  num_classes: 3
+  num_classes: 4
   backbone:
     type: MobileSeg_Base
     inj_type: AAMSx8
