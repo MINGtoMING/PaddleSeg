@@ -141,3 +141,45 @@ def paste_images(image_list):
         result_img.paste(img, box=(width * i, 0))
 
     return result_img
+
+
+def multi_label_visualize(image, result, color_map, save_dir=None, weight=0.6, unseen_background=True):
+    """
+        Convert predict result to color image, and save added image.
+
+        Args:
+            image (str): The path of origin image.
+            result (np.ndarray): The predict result of image, shape is [num_classes, H, W].
+            color_map (list): The color used to save the prediction results.
+            save_dir (str): The directory for saving visual image. Default: None.
+            weight (float): The image weight of visual image, and the result weight is (1 - weight). Default: 0.6
+            unseen_background (bool): Do not visualize background category. Default: True.
+
+        Returns:
+            vis_result (np.ndarray): If `save_dir` is None, return the visualized result.
+    """
+    color_map = [color_map[i:i + 3] for i in range(0, len(color_map), 3)]
+    color_map = np.array(color_map).astype("uint8")
+    if unseen_background:
+        result = result[1:]
+    num_classes = result.shape[0]
+    im = cv2.imread(image)
+    vis_result = im.copy()
+    for i in range(num_classes):
+        mask = result[i]
+        c1 = np.where(mask, color_map[i, 0], im[..., 0])
+        c2 = np.where(mask, color_map[i, 1], im[..., 1])
+        c3 = np.where(mask, color_map[i, 2], im[..., 2])
+        pseudo_img = np.dstack((c3, c2, c1)).astype('uint8')
+        contour, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        vis_result = cv2.drawContours(vis_result, contour, -1, (0, 0, 0), 1)
+        vis_result = cv2.addWeighted(vis_result, weight, pseudo_img, 1 - weight, 0)
+
+    if save_dir is not None:
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        image_name = os.path.split(image)[-1]
+        out_path = os.path.join(save_dir, image_name)
+        cv2.imwrite(out_path, vis_result)
+    else:
+        return vis_result
