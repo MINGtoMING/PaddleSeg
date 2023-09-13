@@ -1224,3 +1224,21 @@ class GenerateInstanceTargets:
             data['instances'] = instances
 
         return data
+
+
+@manager.TRANSFORMS.add_component
+class GenerateInstanceTargetsV2:
+    """
+    Generate instance targets from ground-truth labels in multi-label mode.
+    """
+
+    def __call__(self, data):
+        if 'label' in data:
+            instances = {
+                "image_shape": data['img'].shape[1:],
+                "gt_classes": np.arange(data['label'].shape[-1]).astype('int64'),
+                'gt_masks': data['label'].transpose([2, 0, 1]).astype('int64'),
+            }
+            data['instances'] = instances
+
+        return data
