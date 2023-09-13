@@ -1,4 +1,36 @@
-_base_: './pp_mobileseg_base_uwmgi_224x224_80k.yml'
+_base_: '../_base_/uwmgi.yml'
+
+batch_size: 16
+iters: 80000
+
+optimizer:
+  _inherited_: False
+  type: AdamW
+  weight_decay: 0.01
+  custom_cfg:
+  - name: pos_embed
+    weight_decay_mult: 0.0
+  - name: head
+    lr_multi: 10.0
+  - name: bn
+    weight_decay_mult: 0.0
+
+lr_scheduler:
+  type: PolynomialDecay
+  learning_rate: 0.0006
+  end_lr: 0
+  power: 1.0
+  warmup_iters: 1500
+  warmup_start_lr: 1.0e-6
+
+loss:
+  types:
+    - type: MixedLoss
+      losses:
+        - type: BCELoss
+        - type: LovaszHingeLoss
+      coef: [0.5, 0.5]
+  coef: [1]
 
 model:
   type: PPMobileSeg

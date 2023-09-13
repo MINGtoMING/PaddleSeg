@@ -1,0 +1,62 @@
+_base_: '../_base_/uwmgi.yml'
+
+batch_size: 4
+iters: 160000
+
+train_dataset:
+  transforms:
+    - type: Resize
+      target_size: [224, 224]
+      interp: NEAREST
+    - type: RandomHorizontalFlip
+    - type: RandomAffine
+      max_rotation: 10
+      min_scale_factor: 0.95
+      max_scale_factor: 1.05
+      size: [224, 224]
+      translation_offset: 14
+    - type: RandomDistort
+      brightness_range: 0.05
+      contrast_range: 0.05
+      saturation_range: 0.05
+    - type: GenerateInstanceTargetsV2
+    - type: Normalize
+      mean: [0.0, 0.0, 0.0]
+      std: [1.0, 1.0, 1.0]
+
+model:
+  type: MaskFormer
+  num_classes: 3
+  backbone:
+    type: SwinTransformer_tiny_patch4_window7_224_maskformer
+  pretrained: https://bj.bcebos.com/paddleseg/paddleseg/dygraph/ade20k/maskformer_ade20k_swin_tiny/pretrain/model.pdparams
+
+optimizer:
+  _inherited_: False
+  type: AdamW
+  weight_decay: 0.01
+  custom_cfg:
+  - name: backbone
+    lr_mult: 1.0
+  - name: norm
+    weight_decay_mult: 0.0
+  - name: relative_position_bias_table
+    weight_decay_mult: 0.0
+  grad_clip_cfg: 
+    name: ClipGradByNorm
+    clip_norm: 0.01
+
+lr_scheduler:
+  type: PolynomialDecay
+  warmup_iters: 1500
+  warmup_start_lr: 6.0e-11
+  learning_rate: 6.0e-05
+  end_lr: 0
+  power: 0.9
+
+loss:
+  types:
+    - type: MaskFormerLoss
+      num_classes: 3
+      eos_coef: 0.1
+  coef: [1]
