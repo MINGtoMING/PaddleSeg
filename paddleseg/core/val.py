@@ -79,6 +79,8 @@ def evaluate(model,
         batch_sampler=batch_sampler,
         num_workers=num_workers,
         return_list=True, )
+    use_multilabel = eval_dataset.use_multilabel \
+        if hasattr(eval_dataset, 'use_multilabel') else False
 
     total_iters = len(loader)
     intersect_area_all = paddle.zeros([1], dtype='int64')
@@ -120,7 +122,8 @@ def evaluate(model,
                             flip_vertical=flip_vertical,
                             is_slide=is_slide,
                             stride=stride,
-                            crop_size=crop_size)
+                            crop_size=crop_size,
+                            use_multilabel=use_multilabel)
                 else:
                     pred, logits = infer.aug_inference(
                         model,
@@ -131,7 +134,8 @@ def evaluate(model,
                         flip_vertical=flip_vertical,
                         is_slide=is_slide,
                         stride=stride,
-                        crop_size=crop_size)
+                        crop_size=crop_size,
+                        use_multilabel=use_multilabel)
             else:
                 if precision == 'fp16':
                     with paddle.amp.auto_cast(
@@ -148,7 +152,8 @@ def evaluate(model,
                             trans_info=data['trans_info'],
                             is_slide=is_slide,
                             stride=stride,
-                            crop_size=crop_size)
+                            crop_size=crop_size,
+                            use_multilabel=use_multilabel)
                 else:
                     pred, logits = infer.inference(
                         model,
@@ -156,13 +161,15 @@ def evaluate(model,
                         trans_info=data['trans_info'],
                         is_slide=is_slide,
                         stride=stride,
-                        crop_size=crop_size)
+                        crop_size=crop_size,
+                        use_multilabel=use_multilabel)
 
             intersect_area, pred_area, label_area = metrics.calculate_area(
                 pred,
                 label,
                 eval_dataset.num_classes,
-                ignore_index=eval_dataset.ignore_index)
+                ignore_index=eval_dataset.ignore_index,
+                use_multilabel=use_multilabel)
 
             # Gather from all ranks
             if nranks > 1:
