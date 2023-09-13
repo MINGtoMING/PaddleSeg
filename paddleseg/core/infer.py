@@ -172,7 +172,10 @@ def inference(model,
         if not use_multilabel:
             pred = paddle.argmax(logit, axis=1, keepdim=True, dtype='int32')
         else:
-            pred = (F.sigmoid(logit) > 0.5).astype('int32')
+            if logit.min() > 0 and logit.max() < 1:
+                pred = (logit > 0.5).astype('int32')
+            else:
+                pred = (F.sigmoid(logit) > 0.5).astype('int32')
         return pred, logit
     else:
         return logit
@@ -239,6 +242,9 @@ def aug_inference(model,
     if not use_multilabel:
         pred = paddle.argmax(final_logit, axis=1, keepdim=True, dtype='int32')
     else:
-        pred = (F.sigmoid(final_logit) > 0.5).astype('int32')
+        if final_logit.min() > 0 and final_logit.max() < 1:
+            pred = (final_logit > 0.5).astype('int32')
+        else:
+            pred = (F.sigmoid(final_logit) > 0.5).astype('int32')
 
     return pred, final_logit
